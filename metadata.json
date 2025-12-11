@@ -1,0 +1,6 @@
+{
+  "name": "GuideAI: Career & Stream Advisor",
+  "description": "An AI-driven application to help students (ages 12-18) with career guidance and academic stream selection through psychometric assessments and personalized recommendations powered by Gemini API.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}

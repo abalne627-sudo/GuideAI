@@ -1,44 +1,58 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+
+import React from 'react';
 
 interface Props {
-  children: ReactNode;
+  children: React.ReactNode;
   fallbackMessage?: string;
 }
 
 interface State {
   hasError: boolean;
   error: Error | null;
-  errorInfo: ErrorInfo | null;
+  errorInfo: React.ErrorInfo | null;
 }
 
-class ErrorBoundary extends Component<Props, State> {
+/**
+ * ErrorBoundary class component to catch rendering errors in its child tree.
+ * Inherits from React.Component to use lifecycle methods and access built-in properties.
+ */
+class ErrorBoundary extends React.Component<Props, State> {
+  // Initialize state using property initializer
   public state: State = {
     hasError: false,
     error: null,
     errorInfo: null,
   };
 
-  public static getDerivedStateFromError(_: Error): State {
+  /**
+   * Static method to update state when an error is thrown in a child component.
+   */
+  public static getDerivedStateFromError(error: Error): State {
     // Update state so the next render will show the fallback UI.
-    return { hasError: true, error: _, errorInfo: null };
+    return { hasError: true, error, errorInfo: null };
   }
 
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // You can also log the error to an error reporting service
+  /**
+   * Captures error information for logging or side-effects.
+   */
+  public componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // Standard React class method logic for catching errors
     console.error("Uncaught error:", error, errorInfo);
+    // Properly updates state with error details using the inherited setState method
     this.setState({ error, errorInfo });
   }
 
+  /**
+   * Resets the error state to allow recovery attempts.
+   */
   private handleResetError = () => {
+    // Standard React class method logic for resetting state
     this.setState({ hasError: false, error: null, errorInfo: null });
-    // Optionally, you could try to re-render or navigate to a safe page
-    // For simplicity, we'll just reset the error state, allowing children to re-mount if possible
-    // or allow user to navigate manually.
-    // window.location.reload(); // or navigate to home
   }
 
   public render() {
     if (this.state.hasError) {
+      // Accesses props for fallback customization from the inherited props property
       const { fallbackMessage = "We're sorry — something went wrong." } = this.props;
       return (
         <div className="p-6 sm:p-10 bg-red-50 border border-red-300 rounded-lg shadow-xl max-w-2xl mx-auto my-8 text-center" role="alert">
@@ -72,6 +86,7 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
 
+    // Accesses children from inherited props property
     return this.props.children;
   }
 }

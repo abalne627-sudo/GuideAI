@@ -8,6 +8,7 @@ interface QuestionnaireProps {
   answers: Answers;
   onAnswerChange: (questionId: string, value: number) => void;
   onSubmit: () => void;
+  onCancel?: () => void;
 }
 
 const getFrameworkName = (framework: Framework): string => {
@@ -15,12 +16,12 @@ const getFrameworkName = (framework: Framework): string => {
     case Framework.BigFive: return "Big Five Personality";
     case Framework.MBTI: return "MBTI-Style Preferences";
     case Framework.RIASEC: return "Holland's RIASEC Interests";
-    case Framework.Values: return "Work Value Preferences"; // New
+    case Framework.Values: return "Work Value Preferences"; 
     default: return "Question";
   }
 }
 
-const Questionnaire: React.FC<QuestionnaireProps> = ({ questions, answers, onAnswerChange, onSubmit }) => {
+const Questionnaire: React.FC<QuestionnaireProps> = ({ questions, answers, onAnswerChange, onSubmit, onCancel }) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
   const handleNext = () => {
@@ -38,7 +39,6 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ questions, answers, onAns
   const currentQuestion = questions[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
   
-  // Check if ALL questions are answered only when on the last question and trying to submit
   const allQuestionsAnsweredForSubmit = () => {
     return Object.keys(answers).length === questions.length;
   };
@@ -102,6 +102,21 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ questions, answers, onAns
           </button>
         )}
       </div>
+
+      <div className="mt-6 pt-4 border-t border-gray-100 flex justify-center">
+        {onCancel && (
+          <button 
+            onClick={onCancel}
+            className="text-gray-500 hover:text-red-500 text-sm font-medium flex items-center transition"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 mr-1">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-3a2.25 2.25 0 00-2.25 2.25V9m9.75 0V18.75A2.25 2.25 0 0115.75 21h-7.5A2.25 2.25 0 016 18.75V9m13.5 0h-15" />
+            </svg>
+            Cancel and Return to Dashboard
+          </button>
+        )}
+      </div>
+
       {!allQuestionsAnsweredForSubmit() && isLastQuestion && (
          <p className="text-center text-red-500 text-sm mt-4" role="alert">Please answer all questions before submitting.</p>
       )}

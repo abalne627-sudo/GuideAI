@@ -1,400 +1,326 @@
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { StudentProfile, CareerSuggestion, StreamSuggestion, BigFiveCategory, MBTICategory, RIASECCategory, ValueCategory, SkillRecommendation, ChatMessage, ChatRole } from '../types';
+import { StudentProfile, CareerSuggestion, StreamSuggestion, BigFiveCategory, MBTICategory, RIASECCategory, ValueCategory, SkillRecommendation, ChatMessage, ChatRole, AppPhase, MBTIPole, MBTIPole as MBTIPoleType } from '../types';
 import { BIG_FIVE_DESCRIPTIONS, MBTI_DESCRIPTIONS, RIASEC_DESCRIPTIONS, VALUE_DESCRIPTIONS } from '../constants';
-import Chatbot from './Chatbot'; // Import Chatbot
-import { Chat } from '@google/genai'; // For chatSession type
+import Chatbot from './Chatbot'; 
+import { Chat } from '@google/genai'; 
+import Card from './shared/Card';
 
 interface ResultsDisplayProps {
   profile: StudentProfile;
-  profileNarrative: string | null; // Already streamed string
+  profileNarrative: string | null; 
   careerSuggestions: CareerSuggestion[];
   streamSuggestions: StreamSuggestion[];
-  skillRecommendations?: SkillRecommendation[]; // New
+  skillRecommendations?: SkillRecommendation[]; 
   onRetake: () => void;
+  onBackToDashboard?: () => void;
   generalError?: string | null;
-  // Chatbot related props
   chatSession: Chat | null;
   chatMessages: ChatMessage[];
   onSendChatMessage: (chat: Chat, messageText: string) => AsyncIterable<string>;
   addChatMessage: (message: ChatMessage) => void;
   updateLastBotMessage: (chunk: string, isLastChunk: boolean) => void;
   setChatError: (messageId: string, errorText: string) => void;
+  navigateTo?: (phase: AppPhase, params?: any) => void;
 }
 
 const getScoreLevel = (score?: number): 'high' | 'moderate' | 'low' => {
-  if (score === undefined) return 'moderate'; // Default for rendering
+  if (score === undefined) return 'moderate'; 
   if (score >= 3.8) return 'high';
   if (score >= 2.3) return 'moderate';
   return 'low';
 };
 
-const renderQualitativeScore = (score?: number): string => {
-  if (score === undefined) return 'N/A';
-  let qualitative = '';
+const ScoreBar: React.FC<{ label: string; score: number; colorClass: string; interpretation: string }> = ({ label, score, colorClass, interpretation }) => {
+  const percentage = (score / 5) * 100;
   const level = getScoreLevel(score);
-  if (level === 'high') qualitative = score >= 4.5 ? 'Very High' : 'High';
-  else if (level === 'moderate') qualitative = 'Moderate';
-  else qualitative = score < 1.5 ? 'Very Low' : 'Low';
-  return `${score.toFixed(1)}/5 (${qualitative})`;
+  
+  return (
+    <div className="mb-6 animate-fade-in">
+      <div className="flex justify-between items-end mb-2">
+        <div>
+          <span className="text-sm font-bold text-text-main">{label}</span>
+          <span className={`ml-2 text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+            level === 'high' ? 'bg-green-100 text-green-700' : 
+            level === 'moderate' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'
+          }`}>
+            {level}
+          </span>
+        </div>
+        <span className="text-xs font-mono font-bold text-text-muted">{score.toFixed(1)} / 5.0</span>
+      </div>
+      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+        <div 
+          className={`h-full transition-all duration-1000 ease-out ${colorClass}`} 
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+      <p className="text-[11px] text-text-muted mt-2 leading-relaxed italic">{interpretation}</p>
+    </div>
+  );
 };
 
 const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ 
-  profile, profileNarrative, careerSuggestions, streamSuggestions, skillRecommendations, onRetake, generalError,
-  chatSession, chatMessages, onSendChatMessage, addChatMessage, updateLastBotMessage, setChatError
+  profile, profileNarrative, careerSuggestions, streamSuggestions, skillRecommendations, onRetake, onBackToDashboard, generalError,
+  chatSession, chatMessages, onSendChatMessage, addChatMessage, updateLastBotMessage, setChatError, navigateTo
 }) => {
   const resultsContentRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  const [pdfError, setPdfError] = useState<string | null>(null);
   const [showChatbot, setShowChatbot] = useState(false);
 
   const handleDownloadPdf = async () => {
-    if (!resultsContentRef.current) {
-      setPdfError("Could not find content to download.");
-      return;
-    }
+    if (!resultsContentRef.current) return;
     setIsGeneratingPdf(true);
-    setPdfError(null);
-    setShowChatbot(false); // Hide chatbot before taking screenshot
-
-    // Brief delay to allow UI to update (chatbot to hide)
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-
     try {
-      const sourceElement = resultsContentRef.current;
-      const canvas = await html2canvas(sourceElement, {
-        scale: 2, 
-        useCORS: true, 
-        logging: false, 
-        width: sourceElement.scrollWidth, 
-        height: sourceElement.scrollHeight,
-        windowWidth: sourceElement.scrollWidth, // Correctly placed inside options object
-        windowHeight: sourceElement.scrollHeight, // Correctly placed inside options object
-      });
-
-      const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-      const pdfPageWidth = pdf.internal.pageSize.getWidth();
-      const pdfPageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 10;
-      const pdfContentWidth = pdfPageWidth - 2 * margin;
-      const pdfContentHeight = pdfPageHeight - 2 * margin;
-      const sourceCanvasWidth = canvas.width;
-      const sourceCanvasHeight = canvas.height;
-      const onePageCanvasHeightPx = (pdfContentHeight * sourceCanvasWidth) / pdfContentWidth;
-      let CROP_Y_POSITION = 0;
-      let pageIndex = 0;
-
-      while (CROP_Y_POSITION < sourceCanvasHeight) {
-        if (pageIndex > 0) pdf.addPage();
-        const remainingSourceHeight = sourceCanvasHeight - CROP_Y_POSITION;
-        const sliceHeightPx = Math.min(remainingSourceHeight, onePageCanvasHeightPx);
-        const pageCanvas = document.createElement('canvas');
-        pageCanvas.width = sourceCanvasWidth;
-        pageCanvas.height = sliceHeightPx;
-        const pageCtx = pageCanvas.getContext('2d');
-        if (!pageCtx) {
-          setPdfError("Failed to create canvas context for PDF page."); setIsGeneratingPdf(false); return;
-        }
-        pageCtx.drawImage(canvas, 0, CROP_Y_POSITION, sourceCanvasWidth, sliceHeightPx, 0, 0, sourceCanvasWidth, sliceHeightPx);
-        const pageImgData = pageCanvas.toDataURL('image/png');
-        const renderWidthMM = pdfContentWidth;
-        const renderHeightMM = (sliceHeightPx / sourceCanvasWidth) * renderWidthMM;
-        pdf.addImage(pageImgData, 'PNG', margin, margin, renderWidthMM, renderHeightMM);
-        CROP_Y_POSITION += sliceHeightPx;
-        pageIndex++;
-      }
-      pdf.save('GuideAI_Results.pdf');
-    } catch (err) {
-      console.error("Error generating PDF:", err);
-      setPdfError(err instanceof Error ? `PDF Error: ${err.message}` : "PDF generation failed.");
+      const canvas = await html2canvas(resultsContentRef.current, { scale: 2 });
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgWidth = 210;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, imgWidth, imgHeight);
+      pdf.save('NextStep_CareerReport.pdf');
     } finally {
       setIsGeneratingPdf(false);
     }
   };
-  
-  // Simplified Chatbot message sender for ResultsDisplay context
-  const handleChatbotSendMessage = async (currentChatSession: Chat, messageText: string): Promise<void> => {
-    const userMsg: ChatMessage = { id: `user-${Date.now()}`, role: ChatRole.User, text: messageText, timestamp: Date.now() };
-    addChatMessage(userMsg);
-
-    const botMsgId = `model-${Date.now()}`;
-    addChatMessage({ id: botMsgId, role: ChatRole.Model, text: "...", timestamp: Date.now() });
-    
-    let accumulatedResponse = "";
-    try {
-        for await (const chunk of onSendChatMessage(currentChatSession, messageText)) {
-            accumulatedResponse += chunk;
-            updateLastBotMessage(accumulatedResponse + "...", false);
-        }
-        updateLastBotMessage(accumulatedResponse, true);
-    } catch (error) {
-        console.error("Chatbot stream error in ResultsDisplay:", error);
-        setChatError(botMsgId, "Sorry, I encountered an error.");
-    }
-  };
-
 
   return (
-    <div className="w-full max-w-4xl mx-auto">
-      <div ref={resultsContentRef} className="p-4 sm:p-6 md:p-8 bg-white rounded-xl shadow-2xl print-content">
-        {/* Completion Badge */}
-        <div className="mb-6 p-4 bg-green-50 border border-green-300 text-green-700 rounded-lg text-center shadow">
-          <h3 className="text-xl font-semibold flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-6 h-6 mr-2">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.06 0l4.006-5.5a.75.75 0 00-.227-1.06z" clipRule="evenodd" />
-            </svg>
-            Assessment Completed!
-          </h3>
-          <p className="text-sm">Your personalized guidance is ready below.</p>
+    <div className="w-full max-w-6xl mx-auto pb-24 animate-fade-in">
+      <div className="mb-10 flex flex-col sm:flex-row justify-between items-center bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+        <div>
+          <h2 className="text-3xl font-bold font-serif text-text-main">Your Career Insight Report</h2>
+          <p className="text-text-muted">Generated by Gemini Advanced Analytics</p>
         </div>
+        <div className="flex gap-2 mt-4 sm:mt-0">
+          <button onClick={handleDownloadPdf} disabled={isGeneratingPdf} className="px-6 py-3 bg-primary text-white font-bold rounded-xl shadow-lg hover:shadow-primary/30 transition-all active:scale-95 disabled:opacity-50">
+            {isGeneratingPdf ? 'Processing...' : 'Export PDF'}
+          </button>
+          <button onClick={onBackToDashboard} className="px-6 py-3 bg-slate-100 text-text-muted font-bold rounded-xl hover:bg-slate-200 transition-all">
+            Exit
+          </button>
+        </div>
+      </div>
 
-        <h2 className="text-3xl font-bold text-center text-primary mb-8 font-roboto-slab">Your Assessment Results</h2>
-
-        {generalError}
-
+      <div ref={resultsContentRef} className="space-y-12 bg-white p-6 sm:p-12 rounded-[2rem] shadow-2xl border border-slate-100">
+        {/* Profile Narrative Section */}
         {profileNarrative && (
-          <section className="mb-8 p-6 bg-blue-50 rounded-lg shadow-md border border-blue-200" aria-labelledby="profile-overview-heading">
-            <h3 id="profile-overview-heading" className="text-2xl font-semibold text-neutral-dark mb-3 flex items-center">
-              {/* SVG Icon */} Your Profile Overview
+          <section className="bg-gradient-to-br from-blue-50 to-white p-8 rounded-3xl border border-blue-100 shadow-sm">
+            <h3 className="text-2xl font-bold text-primary mb-6 font-serif flex items-center">
+               <svg className="w-7 h-7 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"></path></svg>
+               Executive Profile Summary
             </h3>
-            <div className="text-gray-700 space-y-3 leading-relaxed whitespace-pre-wrap">
+            <div className="text-text-main text-lg leading-relaxed space-y-4">
               {profileNarrative}
             </div>
           </section>
         )}
 
-        <section className="mb-8" aria-labelledby="psychometric-profile-heading">
-          <h3 id="psychometric-profile-heading" className="text-2xl font-semibold text-neutral-dark mb-4 border-b-2 border-primary pb-2">
-             Detailed Psychometric Profile
-          </h3>
-          {/* Big Five */}
-          {profile.bigFive && Object.keys(profile.bigFive).length > 0 && (
-            <div className="mb-6 p-4 bg-gray-50 rounded-lg shadow">
-              <h4 className="text-xl font-semibold text-gray-700 mb-3">Big Five Traits:</h4>
-              {Object.entries(profile.bigFive).map(([trait, score]) => {
-                const category = trait as BigFiveCategory;
-                const descriptions = BIG_FIVE_DESCRIPTIONS[category];
-                const scoreLevel = getScoreLevel(score);
-                return (
-                  <div key={trait} className="mb-4 p-3 bg-white border border-gray-200 rounded" aria-labelledby={`b5-${category}-heading`}>
-                    <h5 id={`b5-${category}-heading`} className="font-bold text-primary">{category}</h5>
-                    <p className="text-sm text-gray-600 italic mt-1">{descriptions.general}</p>
-                    <p className="mt-2 font-medium">Your Score: <span className="text-accent">{renderQualitativeScore(score)}</span></p>
-                    <p className="text-sm text-gray-700 mt-1">{descriptions[scoreLevel]}</p>
-                  </div>
-                );
-              })}
+        {/* NEW: Psychometric Scores Section */}
+        <section className="space-y-10">
+          <div className="flex items-center mb-4">
+            <div className="h-10 w-2 bg-primary rounded-full mr-4"></div>
+            <h3 className="text-2xl font-bold text-text-main">Psychometric Deep Dive</h3>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+            {/* Big Five Breakdown */}
+            <div className="bg-slate-50/50 p-8 rounded-3xl border border-slate-100">
+              <h4 className="text-lg font-bold text-primary mb-6 flex items-center">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" strokeWidth="2"></path></svg>
+                Personality Profile (Big Five)
+              </h4>
+              {Object.entries(profile.bigFive).map(([category, score]) => (
+                <ScoreBar 
+                  key={category}
+                  label={category}
+                  score={(score as number) || 0}
+                  colorClass="bg-primary"
+                  interpretation={BIG_FIVE_DESCRIPTIONS[category as BigFiveCategory][getScoreLevel(score as number)]}
+                />
+              ))}
             </div>
-          )}
-          {/* MBTI */}
-          {profile.mbti && Object.keys(profile.mbti).length > 0 && (
-             <div className="mb-6 p-4 bg-gray-50 rounded-lg shadow">
-              <h4 className="text-xl font-semibold text-gray-700 mb-3">MBTI-Style Preferences:</h4>
-              {Object.entries(profile.mbti).map(([categoryStr, data]) => {
+
+            {/* RIASEC Interests Breakdown */}
+            <div className="bg-slate-50/50 p-8 rounded-3xl border border-slate-100">
+              <h4 className="text-lg font-bold text-accent mb-6 flex items-center">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" strokeWidth="2"></path></svg>
+                Interest Inventory (Holland Codes)
+              </h4>
+              {Object.entries(profile.riasec).map(([category, score]) => (
+                <ScoreBar 
+                  key={category}
+                  label={category}
+                  score={(score as number) || 0}
+                  colorClass="bg-accent"
+                  interpretation={RIASEC_DESCRIPTIONS[category as RIASECCategory][getScoreLevel(score as number)]}
+                />
+              ))}
+            </div>
+
+            {/* Values Breakdown */}
+            <div className="bg-slate-50/50 p-8 rounded-3xl border border-slate-100">
+              <h4 className="text-lg font-bold text-amber-600 mb-6 flex items-center">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" strokeWidth="2"></path></svg>
+                Work Value Preferences
+              </h4>
+              {Object.entries(profile.values).map(([category, score]) => (
+                <ScoreBar 
+                  key={category}
+                  label={category}
+                  score={(score as number) || 0}
+                  colorClass="bg-amber-500"
+                  interpretation={VALUE_DESCRIPTIONS[category as ValueCategory][getScoreLevel(score as number)]}
+                />
+              ))}
+            </div>
+
+            {/* MBTI Dimensions Breakdown */}
+            <div className="bg-slate-50/50 p-8 rounded-3xl border border-slate-100">
+              <h4 className="text-lg font-bold text-indigo-600 mb-6 flex items-center">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" strokeWidth="2"></path></svg>
+                Cognitive Style (MBTI Dimensions)
+              </h4>
+              <div className="space-y-8">
+                {Object.entries(profile.mbti).map(([category, data]) => {
                   if (!data) return null;
-                  const category = categoryStr as MBTICategory;
-                  const descriptions = MBTI_DESCRIPTIONS[category];
-                  const preferredPoleData = data.dominantPole === descriptions.pole1.pole ? descriptions.pole1 : descriptions.pole2;
+                  const cat = category as MBTICategory;
+                  const desc = MBTI_DESCRIPTIONS[cat];
+                  const mbtiData = data as { dominantPole: MBTIPoleType; scoreDominant: number; scoreRecessive: number };
+                  const domPole = mbtiData.dominantPole;
+                  const isPole1 = desc.pole1.pole === domPole;
+                  const dominantName = isPole1 ? desc.pole1.name : desc.pole2.name;
+                  const dominantDesc = isPole1 ? desc.pole1.description : desc.pole2.description;
+
                   return (
-                    <div key={category} className="mb-4 p-3 bg-white border border-gray-200 rounded" aria-labelledby={`mbti-${category}-heading`}>
-                      <h5 id={`mbti-${category}-heading`} className="font-bold text-primary">{category} - <span className="italic text-gray-600 text-sm">{descriptions.dimension}</span></h5>
-                      <p className="mt-2 font-medium">Your Preference: <span className="text-accent">{preferredPoleData.name}</span></p>
-                      <p className="text-sm text-gray-700 mt-1">{preferredPoleData.description}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        (Score for {data.dominantPole}: {data.scoreDominant.toFixed(1)} vs Score for {data.dominantPole === descriptions.pole1.pole ? descriptions.pole2.pole : descriptions.pole1.pole}: {data.scoreRecessive.toFixed(1)})
-                      </p>
+                    <div key={category} className="p-4 bg-white rounded-2xl shadow-sm border border-indigo-50">
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-xs font-black text-indigo-400 uppercase tracking-widest">{desc.dimension}</span>
+                        <span className="text-sm font-bold text-indigo-700">{dominantName}</span>
+                      </div>
+                      <p className="text-xs text-text-muted leading-relaxed">{dominantDesc}</p>
+                      <div className="mt-4 flex gap-1">
+                         <div className={`h-1.5 flex-1 rounded-full ${isPole1 ? 'bg-indigo-600' : 'bg-slate-200'}`}></div>
+                         <div className={`h-1.5 flex-1 rounded-full ${!isPole1 ? 'bg-indigo-600' : 'bg-slate-200'}`}></div>
+                      </div>
                     </div>
                   );
-              })}
+                })}
+              </div>
             </div>
-          )}
-          {/* RIASEC */}
-          {profile.riasec && Object.keys(profile.riasec).length > 0 && (
-            <div className="mb-6 p-4 bg-gray-50 rounded-lg shadow">
-              <h4 className="text-xl font-semibold text-gray-700 mb-3">RIASEC Interests:</h4>
-              {Object.entries(profile.riasec).map(([interest, score]) => {
-                const category = interest as RIASECCategory;
-                const descriptions = RIASEC_DESCRIPTIONS[category];
-                const scoreLevel = getScoreLevel(score);
-                return (
-                  <div key={interest} className="mb-4 p-3 bg-white border border-gray-200 rounded" aria-labelledby={`riasec-${category}-heading`}>
-                    <h5 id={`riasec-${category}-heading`} className="font-bold text-primary">{category}</h5>
-                    <p className="text-sm text-gray-600 italic mt-1">{descriptions.general}</p>
-                    <p className="mt-2 font-medium">Your Score: <span className="text-accent">{renderQualitativeScore(score)}</span></p>
-                    <p className="text-sm text-gray-700 mt-1">{descriptions[scoreLevel]}</p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {/* Values - New Section */}
-          {profile.values && Object.keys(profile.values).length > 0 && (
-            <div className="p-4 bg-gray-50 rounded-lg shadow">
-              <h4 className="text-xl font-semibold text-gray-700 mb-3">Work Value Preferences:</h4>
-              {Object.entries(profile.values).map(([value, score]) => {
-                const category = value as ValueCategory;
-                const descriptions = VALUE_DESCRIPTIONS[category];
-                const scoreLevel = getScoreLevel(score);
-                return (
-                  <div key={value} className="mb-4 p-3 bg-white border border-gray-200 rounded" aria-labelledby={`value-${category}-heading`}>
-                    <h5 id={`value-${category}-heading`} className="font-bold text-primary">{category}</h5>
-                    <p className="text-sm text-gray-600 italic mt-1">{descriptions.general}</p>
-                    <p className="mt-2 font-medium">Your Score: <span className="text-accent">{renderQualitativeScore(score)}</span></p>
-                    <p className="text-sm text-gray-700 mt-1">{descriptions[scoreLevel]}</p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          </div>
         </section>
 
-        {/* Career Suggestions */}
-        <section className="mb-8 p-6 bg-gray-50 rounded-lg shadow" aria-labelledby="career-suggestions-heading">
-          <h3 id="career-suggestions-heading" className="text-2xl font-semibold text-neutral-dark mb-4 border-b-2 border-accent pb-2 flex items-center">
-            Career Suggestions
-          </h3>
-          {(!careerSuggestions || careerSuggestions.length === 0) && !generalError ? (
-             <p className="text-gray-600">No specific career suggestions could be generated at this time.</p>
-          ) : (
-          <ul className="space-y-4">
-            {careerSuggestions?.map((career, index) => (
-              <li key={index} className="p-4 bg-white border border-gray-200 rounded-md shadow-sm hover:shadow-lg transition-shadow">
-                <h4 className="text-xl font-semibold text-accent">{career.name}</h4>
-                <p className="text-sm text-gray-600 mt-1">{career.description}</p>
-                <p className="text-sm text-gray-700 mt-2"><strong className="font-medium">Rationale:</strong> {career.rationale}</p>
-                <p className="text-sm text-gray-700 mt-1"><strong className="font-medium">Education Path (India):</strong> {career.educationPathIndia}</p>
-                {career.dayInTheLifeNarrative && (
-                  <p className="text-sm text-gray-700 mt-2 italic bg-blue-50 p-2 rounded">
-                    <strong className="font-medium not-italic">A Day in the Life:</strong> {career.dayInTheLifeNarrative}
-                  </p>
-                )}
-                {career.dayInTheLifeImageUrl && (
-                  <div className="mt-3">
-                    <img src={career.dayInTheLifeImageUrl} alt={`Visual representation of ${career.name}`} className="rounded-md shadow-sm max-h-48 object-contain border" />
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-          )}
-        </section>
-
-        {/* Stream Suggestions */}
-        <section className="mb-8 p-6 bg-gray-50 rounded-lg shadow" aria-labelledby="stream-suggestions-heading">
-          <h3 id="stream-suggestions-heading" className="text-2xl font-semibold text-neutral-dark mb-4 border-b-2 border-secondary pb-2 flex items-center">
-            Academic Stream Suggestions
-          </h3>
-           {(!streamSuggestions || streamSuggestions.length === 0) && !generalError ? (
-             <p className="text-gray-600">No specific academic stream suggestions could be generated at this time.</p>
-          ) : (
-          <ul className="space-y-4">
-            {streamSuggestions?.map((stream, index) => (
-              <li key={index} className="p-4 bg-white border border-gray-200 rounded-md shadow-sm hover:shadow-lg transition-shadow">
-                <h4 className="text-xl font-semibold text-secondary">{stream.name}</h4>
-                <p className="text-sm text-gray-600 mt-1">{stream.description}</p>
-                <p className="text-sm text-gray-700 mt-2"><strong className="font-medium">Rationale:</strong> {stream.rationale}</p>
-                {stream.subjects && stream.subjects.length > 0 && (
-                  <p className="text-sm text-gray-700 mt-1"><strong className="font-medium">Key Subjects:</strong> {stream.subjects.join(', ')}</p>
-                )}
-              </li>
-            ))}
-          </ul>
-          )}
-        </section>
-
-        {/* Skill Recommendations - New Section */}
-        {skillRecommendations && skillRecommendations.length > 0 && (
-          <section className="mb-8 p-6 bg-yellow-50 border border-yellow-200 rounded-lg shadow" aria-labelledby="skill-recs-heading">
-            <h3 id="skill-recs-heading" className="text-2xl font-semibold text-neutral-dark mb-4 border-b-2 border-yellow-400 pb-2 flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-2 text-yellow-600"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" /></svg>
-              Skills to Develop
-            </h3>
-            <ul className="space-y-4">
-              {skillRecommendations.map((skill, index) => (
-                <li key={index} className="p-4 bg-white border border-gray-200 rounded-md shadow-sm">
-                  <h4 className="text-xl font-semibold text-yellow-700">{skill.skillName}</h4>
-                  <p className="text-sm text-gray-600 mt-1">{skill.description}</p>
-                  <p className="text-sm text-gray-700 mt-2"><strong className="font-medium">Relevance:</strong> {skill.relevance}</p>
-                  {skill.learningResources && skill.learningResources.length > 0 && (
-                    <div className="mt-2">
-                      <strong className="text-sm font-medium text-gray-700">Suggested Resources:</strong>
-                      <ul className="list-disc list-inside ml-4 text-sm">
-                        {skill.learningResources.map((res, resIdx) => (
-                          <li key={resIdx}>
-                            <a href={res.url !== '#' ? res.url : undefined} target="_blank" rel="noopener noreferrer" className={`hover:underline ${res.url !== '#' ? 'text-blue-600' : 'text-gray-500 cursor-default'}`}>
-                              {res.title} ({res.type})
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
+        {/* Career Suggestions Grid */}
+        <section>
+          <div className="flex items-center mb-8">
+            <div className="h-10 w-2 bg-accent rounded-full mr-4"></div>
+            <h3 className="text-2xl font-bold text-text-main">Top Career Matches</h3>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {careerSuggestions.map((career, index) => (
+              <Card key={index} className="flex flex-col border border-slate-100 hover:border-accent hover:shadow-xl transition-all h-full p-0 overflow-hidden">
+                <div className="h-48 overflow-hidden bg-slate-100">
+                  {career.dayInTheLifeImageUrl ? (
+                    <img src={career.dayInTheLifeImageUrl} alt={career.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-slate-300">
+                      <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"></path></svg>
                     </div>
                   )}
-                </li>
+                </div>
+                <div className="p-6 flex-grow">
+                  <div className="flex justify-between items-start mb-2">
+                    <h4 className="text-xl font-bold text-text-main leading-tight">{career.name}</h4>
+                    {career.iscoCode && (
+                       <span className="text-[10px] font-black bg-blue-100 text-blue-700 px-2 py-0.5 rounded uppercase">ISCO-{career.iscoCode}</span>
+                    )}
+                  </div>
+                  <p className="text-sm text-text-muted line-clamp-2">{career.description}</p>
+                  
+                  <div className="mt-6 space-y-4">
+                     <div className="p-3 bg-slate-50 rounded-xl">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Psychometric Match</p>
+                        <p className="text-xs text-text-main leading-relaxed">{career.rationale}</p>
+                     </div>
+                  </div>
+                </div>
+                <div className="p-4 bg-slate-50 border-t border-slate-100 mt-auto">
+                   <button 
+                     onClick={() => navigateTo?.(AppPhase.OccupationsExplorer, { selectedCode: career.iscoCode })}
+                     className="w-full py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-primary hover:bg-primary hover:text-white transition-all shadow-sm"
+                   >
+                     View Global Standards
+                   </button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        {/* Skill Gap Analysis Section */}
+        {skillRecommendations && skillRecommendations.length > 0 && (
+          <section className="bg-amber-50/50 p-8 rounded-3xl border border-amber-100">
+            <h3 className="text-2xl font-bold text-amber-800 mb-8 flex items-center">
+              <svg className="w-7 h-7 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"></path></svg>
+              Growth Plan: Skills to Master
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {skillRecommendations.map((skill, idx) => (
+                <div key={idx} className="bg-white p-5 rounded-2xl shadow-sm border border-amber-200">
+                  <h4 className="font-bold text-lg text-amber-900">{skill.skillName}</h4>
+                  <p className="text-sm text-amber-700 mt-1">{skill.description}</p>
+                  <div className="mt-4 flex flex-col gap-2">
+                    {skill.learningResources?.slice(0, 1).map((res, rIdx) => (
+                      <a key={rIdx} href={res.url} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-primary hover:underline flex items-center">
+                         Explore {res.title}
+                         <svg className="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" strokeWidth="2"></path></svg>
+                      </a>
+                    ))}
+                  </div>
+                </div>
               ))}
-            </ul>
+            </div>
           </section>
         )}
       </div>
 
-      {/* Chatbot Toggle & Display Area - NOT part of PDF content */}
-      <div className="mt-6 text-center">
-        <button
-            onClick={() => setShowChatbot(!showChatbot)}
-            className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow hover:bg-indigo-700 transition duration-150 flex items-center justify-center mx-auto focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-500"
-            aria-expanded={showChatbot}
-            aria-controls="ai-mentor-chatbot"
+      {/* Floating Chatbot FAB */}
+      <div className="fixed bottom-8 right-8 z-50">
+        <button 
+          onClick={() => setShowChatbot(!showChatbot)}
+          className={`w-16 h-16 rounded-full shadow-2xl flex items-center justify-center transition-all transform hover:scale-110 active:scale-90 ${showChatbot ? 'bg-secondary rotate-45' : 'bg-primary'}`}
         >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-2">
-               <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m2.25-3H12m2.25-3H12M3 12l3 3m0 0l3-3m-3 3v6m0-6V6m6-3v18m6-18v18" />
-            </svg>
-            {showChatbot ? "Hide AI Mentor Chat" : "Chat with AI Mentor"}
+          {showChatbot ? (
+            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"></path></svg>
+          ) : (
+            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"></path></svg>
+          )}
         </button>
       </div>
 
       {showChatbot && chatSession && (
-        <div id="ai-mentor-chatbot" className="mt-6 max-w-2xl mx-auto" role="region" aria-live="polite">
+        <div className="fixed bottom-28 right-8 z-50 w-[90vw] sm:w-[450px] animate-fade-in">
            <Chatbot
                 chatSession={chatSession}
                 initialMessages={chatMessages}
                 onSendMessage={(session, text) => {
-                    // This is a bit of a workaround: Chatbot directly calls onSendMessage which is async iterable
-                    // We need to manage message state in App.tsx
-                    handleChatbotSendMessage(session, text); 
-                    // The onSendMessage prop for Chatbot itself needs to match its signature.
-                    // The actual streaming logic will be handled via App.tsx states.
-                    // So we return an empty async iterable here, or handle it inside Chatbot more directly if preferred.
-                    // For this structure, where App.tsx manages messages:
-                    return (async function*() {})(); // Return empty async iterable.
+                    const botMsgId = `model-${Date.now()}`;
+                    addChatMessage({ id: `user-${Date.now()}`, role: ChatRole.User, text, timestamp: Date.now() });
+                    addChatMessage({ id: botMsgId, role: ChatRole.Model, text: "...", timestamp: Date.now() });
+                    
+                    return (async function*() {
+                      let fullText = "";
+                      for await (const chunk of onSendChatMessage(session, text)) {
+                        fullText += chunk;
+                        updateLastBotMessage(fullText + "...", false);
+                      }
+                      updateLastBotMessage(fullText, true);
+                    })();
                 }}
             />
         </div>
       )}
-       {showChatbot && !chatSession && (
-         <p className="text-center text-red-500 mt-2">AI Mentor Chat session could not be started. Please try reloading the results.</p>
-       )}
-
-
-      {pdfError && ( null /* PDF error display. Comment was: {pdfError && ( /* PDF error display * / )} */ )}
-      <div className="text-center mt-6 flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-4">
-        <button
-          onClick={handleDownloadPdf}
-          disabled={isGeneratingPdf || !resultsContentRef.current}
-          className="px-8 py-3 bg-accent text-white font-semibold rounded-lg shadow hover:bg-emerald-600 transition duration-150 flex items-center justify-center sm:w-auto w-full disabled:opacity-50 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-accent"
-          aria-label="Download results as PDF"
-        >
-          {isGeneratingPdf ? "Generating PDF..." : "Download Results as PDF"}
-        </button>
-        <button
-          onClick={onRetake}
-          className="px-8 py-3 bg-primary text-white font-semibold rounded-lg shadow hover:bg-blue-600 transition duration-150 flex items-center justify-center sm:w-auto w-full focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary"
-          aria-label="Retake assessment and return to dashboard"
-        >
-          Retake Assessment
-        </button>
-      </div>
     </div>
   );
 };

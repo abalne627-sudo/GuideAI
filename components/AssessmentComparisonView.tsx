@@ -1,10 +1,12 @@
 
 import React from 'react';
-import { AssessmentRecord, StudentProfile, BigFiveCategory, RIASECCategory, ValueCategory, MBTICategory } from '../types'; // Assuming ValueCategory is in types
+import { AssessmentRecord, StudentProfile, BigFiveCategory, RIASECCategory, ValueCategory, MBTICategory, BreadcrumbItem } from '../types'; 
+import Breadcrumbs from './shared/Breadcrumbs';
 
 interface AssessmentComparisonViewProps {
   assessment1: AssessmentRecord;
   assessment2: AssessmentRecord;
+  onBack: () => void;
 }
 
 const renderScoreComparison = (score1?: number, score2?: number) => {
@@ -67,13 +69,19 @@ const ComparisonSection: React.FC<{ title: string; data1?: Partial<Record<string
   );
 };
 
-const AssessmentComparisonView: React.FC<AssessmentComparisonViewProps> = ({ assessment1, assessment2 }) => {
+const AssessmentComparisonView: React.FC<AssessmentComparisonViewProps> = ({ assessment1, assessment2, onBack }) => {
   if (!assessment1 || !assessment2) {
     return <p className="text-red-500 text-center">Error: One or both assessments are missing for comparison.</p>;
   }
 
+  const breadcrumbItems: BreadcrumbItem[] = [
+    { label: 'Dashboard', onClick: onBack },
+    { label: 'Comparison' }
+  ];
+
   return (
-    <div className="w-full max-w-3xl mx-auto p-4 sm:p-6">
+    <div className="w-full max-w-3xl mx-auto p-4 sm:p-6 pb-12">
+      <Breadcrumbs items={breadcrumbItems} />
       <h2 className="text-3xl font-bold text-center text-primary mb-8 font-roboto-slab">Assessment Comparison</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 mb-6 text-center">
         <div className="p-3 bg-blue-50 rounded-lg">
@@ -95,8 +103,14 @@ const AssessmentComparisonView: React.FC<AssessmentComparisonViewProps> = ({ ass
         {renderMBTIComparison(assessment1.profile.mbti as any, assessment2.profile.mbti as any)}
       </div>
 
-      <div className="mt-8 text-center">
-         <p className="text-sm text-gray-500">This comparison highlights changes in your self-reported traits and interests over time.</p>
+      <div className="mt-8 text-center flex flex-col items-center">
+         <p className="text-sm text-gray-500 mb-6">This comparison highlights changes in your self-reported traits and interests over time.</p>
+         <button 
+            onClick={onBack}
+            className="px-8 py-3 bg-primary text-white font-semibold rounded-lg shadow hover:bg-blue-600 transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary"
+         >
+           Back to Dashboard
+         </button>
       </div>
     </div>
   );

@@ -12,8 +12,9 @@ import LoadingIndicator from './components/LoadingIndicator';
 import ResourceHub from './components/ResourceHub'; 
 import AssessmentComparisonView from './components/AssessmentComparisonView'; 
 import ErrorBoundary from './components/ErrorBoundary'; 
-import OccupationsExplorerPage from './components/OccupationsExplorerPage'; // New
-import EducationExplorerPage from './components/EducationExplorerPage';   // New
+import OccupationsExplorerPage from './components/OccupationsExplorerPage';
+import EducationExplorerPage from './components/EducationExplorerPage';
+import BibliographyPage from './components/BibliographyPage';
 import { calculateStudentProfile } from './services/assessmentService';
 import { getCareerSuggestions, getStreamSuggestions, getProfileNarrativeStream, startChatSession, sendChatMessageStream, getSkillRecommendations } from './services/geminiService';
 import { getCurrentUser, logout as authLogout } from './services/authService';
@@ -21,7 +22,7 @@ import { saveUserAssessment, getAssessmentById } from './services/assessmentApiS
 import { Chat } from '@google/genai';
 import { dbIsISCODataLoaded, dbSaveISCOData } from './services/dbService'; 
 import { fetchAndParseISCOData } from './services/iscoService'; 
-import { IndianEducationSystemData } from './data/indianEducationSystemData'; // New
+import { IndianEducationSystemData } from './data/indianEducationSystemData';
 
 
 const App: React.FC = () => {
@@ -32,7 +33,7 @@ const App: React.FC = () => {
   const [answers, setAnswers] = useState<Answers>({});
   const [currentAssessmentData, setCurrentAssessmentData] = useState<AssessmentResultData | null>(null);
   const [selectedAssessmentToView, setSelectedAssessmentToView] = useState<AssessmentRecord | null>(null);
-  const [comparisonParams, setComparisonParams] = useState<{id1: string, id2: string} | null>(null); // For compare view
+  const [comparisonParams, setComparisonParams] = useState<{id1: string, id2: string} | null>(null);
 
   const [chatSession, setChatSession] = useState<Chat | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -45,6 +46,9 @@ const App: React.FC = () => {
   const [iscoDataLoading, setIscoDataLoading] = useState<boolean>(false);
   const [iscoDataError, setIscoDataError] = useState<string | null>(null);
   const [isIscoDataSuccessfullyLoaded, setIsIscoDataSuccessfullyLoaded] = useState<boolean>(false);
+
+  // Deep-linking state for the Occupations Explorer
+  const [iscoDeepLinkCode, setIscoDeepLinkCode] = useState<string | null>(null);
 
 
   useEffect(() => {
@@ -99,10 +103,13 @@ const App: React.FC = () => {
     } else {
         setComparisonParams(null);
     }
-    // Reset specific page states when navigating away
-    if (appPhase === AppPhase.OccupationsExplorer || appPhase === AppPhase.EducationExplorer) {
-        // Add any state resets needed for these explorers if they become complex
+
+    if (phase === AppPhase.OccupationsExplorer && params?.selectedCode) {
+      setIscoDeepLinkCode(params.selectedCode);
+    } else if (phase !== AppPhase.OccupationsExplorer) {
+      setIscoDeepLinkCode(null);
     }
+
     setAppPhase(phase);
   };
 
@@ -287,17 +294,16 @@ const App: React.FC = () => {
       };
       fetchForCompare();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appPhase, comparisonParams]); // navigateTo is stable
+  }, [appPhase, comparisonParams]);
 
 
   const renderContent = () => {
     const iscoStatusDisplay = () => {
-        if (appPhase !== AppPhase.Login && appPhase !== AppPhase.LoadingResults && appPhase !== AppPhase.OccupationsExplorer) { // Don't show during initial load or on the explorer itself
+        if (appPhase !== AppPhase.Login && appPhase !== AppPhase.LoadingResults && appPhase !== AppPhase.OccupationsExplorer) { 
             if (iscoDataLoading) {
                 return <div className="text-center p-2 bg-blue-50 text-blue-700 rounded-md mb-4 text-sm" role="status">Initializing background data (occupations)...</div>;
             }
-            if (iscoDataError && !isIscoDataSuccessfullyLoaded) { // Only show error if it never loaded successfully
+            if (iscoDataError && !isIscoDataSuccessfullyLoaded) { 
                 return <div className="text-center p-2 bg-yellow-50 text-yellow-700 rounded-md mb-4 text-sm" role="alert">Occupational data unavailable: {iscoDataError}. Some features may be limited.</div>;
             }
         }
@@ -310,6 +316,8 @@ const App: React.FC = () => {
             {message}
         </div>
     );
+
+    const handleBackToDashboard = () => navigateTo(AppPhase.Dashboard);
 
     switch (appPhase) {
       case AppPhase.Login:
@@ -342,6 +350,7 @@ const App: React.FC = () => {
               answers={answers}
               onAnswerChange={handleAnswerChange}
               onSubmit={handleSubmitAssessment}
+              onCancel={handleBackToDashboard}
             />
           </>
         );
@@ -369,6 +378,7 @@ const App: React.FC = () => {
                         resetCurrentAssessmentState();
                         if (currentUser) navigateTo(AppPhase.Dashboard); else navigateTo(AppPhase.Login); 
                     }}
+                    onBackToDashboard={handleBackToDashboard}
                     generalError={null} 
                     chatSession={chatSession}
                     chatMessages={chatMessages}
@@ -376,11 +386,12 @@ const App: React.FC = () => {
                     addChatMessage={addChatMessageToList}
                     updateLastBotMessage={updateLastBotMessageInList}
                     setChatError={setChatErrorMessageInList}
+                    navigateTo={navigateTo}
                 />
             </>
         );
       case AppPhase.ResourceHub:
-        return <> {iscoStatusDisplay()} <ResourceHub /> </>;
+        return <> {iscoStatusDisplay()} <ResourceHub navigateToDashboard={handleBackToDashboard} /> </>;
 
       case AppPhase.CompareAssessments:
         if (!comparisonData.assessment1 || !comparisonData.assessment2) {
@@ -388,15 +399,26 @@ const App: React.FC = () => {
             navigateTo(AppPhase.Dashboard); 
             return loadingMessage ? <LoadingIndicator message={loadingMessage} /> : errorDisplay(error);
         }
-        return <> {iscoStatusDisplay()} <AssessmentComparisonView assessment1={comparisonData.assessment1} assessment2={comparisonData.assessment2} /> </>;
+        return <> {iscoStatusDisplay()} <AssessmentComparisonView assessment1={comparisonData.assessment1} assessment2={comparisonData.assessment2} onBack={handleBackToDashboard} /> </>;
       
       case AppPhase.OccupationsExplorer:
         if (!currentUser) { navigateTo(AppPhase.Login); return <LoadingIndicator message="Redirecting..."/>; }
-        return <OccupationsExplorerPage navigateToDashboard={() => navigateTo(AppPhase.Dashboard)} iscoInitialLoading={iscoDataLoading} iscoLoadError={iscoDataError} iscoSuccessfullyLoaded={isIscoDataSuccessfullyLoaded} />;
+        return (
+          <OccupationsExplorerPage 
+            navigateToDashboard={handleBackToDashboard} 
+            iscoInitialLoading={iscoDataLoading} 
+            iscoLoadError={iscoDataError} 
+            iscoSuccessfullyLoaded={isIscoDataSuccessfullyLoaded}
+            deepLinkCode={iscoDeepLinkCode}
+          />
+        );
 
       case AppPhase.EducationExplorer:
         if (!currentUser) { navigateTo(AppPhase.Login); return <LoadingIndicator message="Redirecting..."/>; }
-        return <EducationExplorerPage educationSystemData={IndianEducationSystemData} navigateToDashboard={() => navigateTo(AppPhase.Dashboard)} />;
+        return <EducationExplorerPage educationSystemData={IndianEducationSystemData} navigateToDashboard={handleBackToDashboard} />;
+
+      case AppPhase.Bibliography:
+        return <BibliographyPage navigateToDashboard={handleBackToDashboard} />;
 
       case AppPhase.Error: 
         return (
@@ -424,13 +446,13 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-neutral font-sans">
-      <Header />
+      <Header onHomeClick={currentUser ? () => navigateTo(AppPhase.Dashboard) : undefined} />
       <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         <ErrorBoundary>
           {renderContent()}
         </ErrorBoundary>
       </main>
-      <Footer />
+      <Footer onBibliographyClick={() => navigateTo(AppPhase.Bibliography)} />
     </div>
   );
 };

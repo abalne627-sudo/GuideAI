@@ -55,8 +55,9 @@ export const LIKERT_SCALE_OPTIONS = [
 ];
 
 export const GEMINI_API_KEY = process.env.API_KEY;
-export const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
-export const GEMINI_IMAGE_MODEL = 'imagen-4.0-generate-001';
+// Using recommended models as per guidelines
+export const GEMINI_TEXT_MODEL = 'gemini-3-flash-preview';
+export const GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image';
 export const SIMULATED_OTP = "123456";
 
 
@@ -84,7 +85,7 @@ interface MBTIDescription {
 export const MBTI_DESCRIPTIONS: Record<MBTICategory, MBTIDescription> = {
   [MBTICategory.ExtraversionIntroversion]: { dimension: "Focus of Energy: How you direct and receive energy.", pole1: { pole: MBTIPole.Extraversion, name: "Extraversion (E)", description: "You likely focus on the outer world of people and things. You are energized by interacting with others and taking action." }, pole2: { pole: MBTIPole.Introversion, name: "Introversion (I)", description: "You likely focus on your inner world of ideas and experiences. You are energized by spending time alone or in quiet reflection." } },
   [MBTICategory.SensingIntuition]: { dimension: "Information Gathering: How you prefer to take in information.", pole1: { pole: MBTIPole.Sensing, name: "Sensing (S)", description: "You tend to focus on the present and concrete information gathered through your senses. You prefer dealing with facts and details." }, pole2: { pole: MBTIPole.Intuition, name: "Intuition (N)", description: "You tend to focus on patterns, possibilities, and the future. You prefer dealing with abstract concepts and new ideas." } },
-  [MBTICategory.ThinkingFeeling]: { dimension: "Decision Making: How you prefer to make decisions.", pole1: { pole: MBTIPole.Thinking, name: "Thinking (T)", description: "You tend to make decisions based on logic and objective analysis. You value fairness and consistency." }, pole2: { pole: MBTIPole.Feeling, name: "Feeling (F)", description: "You tend to make decisions based on values and how they impact others. You value harmony and empathy." } },
+  [MBTICategory.ThinkingFeeling]: { dimension: "Decision Making: How you prefer to make decisions.", pole1: { pole: MBTIPole.Thinking, name: "Thinking (T)", description: "You tend to make decisions based on logic and objective analysis. You value fairness and consistency." }, pole2: { pole: MBTIPole.Feeling, name: "Feeling (F)", description: "You value harmony and empathy." } },
   [MBTICategory.JudgingPerceiving]: { dimension: "Lifestyle Preference: How you prefer to live your outer life.", pole1: { pole: MBTIPole.Judging, name: "Judging (J)", description: "You prefer a planned, organized approach to life. You like to have things decided and enjoy structure." }, pole2: { pole: MBTIPole.Perceiving, name: "Perceiving (P)", description: "You prefer a flexible, spontaneous approach to life. You like to keep your options open and enjoy adapting to new situations." } }
 };
 
@@ -132,12 +133,16 @@ export const VALUE_DESCRIPTIONS: Record<ValueCategory, TraitInterpretation> = {
 };
 
 
-// New: Static Resources for Resource Hub
+// Expanded Static Resources for Resource Hub
 export const STATIC_RESOURCES: ResourceItem[] = [
-  { id: 'res1', title: "Understanding Your RIASEC Score", type: 'article', url: '#', description: "Learn more about the Holland Codes and what they mean for your career choices.", tags: ['riasec', 'career exploration'] },
-  { id: 'res2', title: "Exploring STEM Careers", type: 'video', url: '#', description: "An overview of exciting career paths in Science, Technology, Engineering, and Math.", tags: ['stem', 'career paths'] },
-  { id: 'res3', title: "Effective Study Techniques", type: 'article', url: '#', description: "Tips and tricks to improve your study habits and academic performance.", tags: ['study skills', 'academics'] },
-  { id: 'res4', title: "Coursera Career Learning", type: 'course_platform', url: 'https://www.coursera.org/', description: "Explore courses and Specializations to build skills for in-demand careers.", tags: ['online learning', 'skill development'] },
-  { id: 'res5', title: "Mindfulness for Students", type: 'tool', url: '#', description: "Simple mindfulness exercises to manage stress and improve focus.", tags: ['well-being', 'stress management'] },
-  { id: 'res6', title: "Introduction to Myers-Briggs Types", type: 'article', url: '#', description: "A beginner's guide to understanding the 16 personality types (note: for informational purposes).", tags: ['mbti', 'personality'] },
+  { id: 'yc_school', title: "Y Combinator's Startup School", type: 'course_platform', url: 'https://www.startupschool.org/', description: "The premier free online course for aspiring entrepreneurs. Learn how to build, launch, and grow a startup from the experts who funded Airbnb, Stripe, and Dropbox.", tags: ['entrepreneurship', 'YC', 'startups', 'innovation'] },
+  { id: 'sat_bluebook', title: "Bluebook™ Digital Testing App", type: 'tool', url: 'https://bluebook.collegeboard.org/', description: "The official app for the Digital SAT. Essential for taking full-length practice tests and getting familiar with the actual digital testing environment.", tags: ['SAT', 'digital', 'official'] },
+  { id: 'sat1', title: "Official SAT Practice - Khan Academy", type: 'tool', url: 'https://www.khanacademy.org/sat', description: "The world standard for SAT prep. Personalized practice plans based on your diagnostic results, built in partnership with College Board.", tags: ['SAT', 'test prep', 'college admission'] },
+  { id: 'sat2', title: "SAT Suite of Assessments (International)", type: 'article', url: 'https://satsuite.collegeboard.org/sat/international', description: "Detailed information for students in India and abroad, including test center locations, international fees, and ID requirements.", tags: ['SAT', 'international', 'admission'] },
+  { id: 'mit_highschool', title: "MIT OpenCourseWare: Highlights for High School", type: 'course_platform', url: 'https://ocw.mit.edu/high-school/', description: "Access free MIT course materials specifically curated for high school students. A great way to explore advanced STEM topics early.", tags: ['STEM', 'advanced', 'academics'] },
+  { id: 'res1', title: "Understanding Your RIASEC Score", type: 'article', url: 'https://www.onetcenter.org/IP.html', description: "Learn more about the Holland Codes and how your interest patterns map to the world of work.", tags: ['riasec', 'career exploration'] },
+  { id: 'res3', title: "Mastering Study Skills & Time Management", type: 'article', url: 'https://learningcenter.unc.edu/tips-and-tools/', description: "Proven techniques to improve your memory, concentration, and organizational skills for school success.", tags: ['study skills', 'productivity'] },
+  { id: 'res4', title: "Coursera: Career Discovery Specializations", type: 'course_platform', url: 'https://www.coursera.org/browse/personal-development', description: "Beginner-friendly courses to explore different industries before committing to a major.", tags: ['online learning', 'discovery'] },
+  { id: 'res5', title: "Headspace for Students", type: 'tool', url: 'https://www.headspace.com/studentplan', description: "Mindfulness and meditation tools designed to help students manage exam stress and improve focus.", tags: ['well-being', 'mental health'] },
+  { id: 'res8', title: "Google Career Certificates", type: 'tool', url: 'https://grow.google/certificates/', description: "Professional-grade training for high-growth fields like Data Analytics, UX Design, and IT Support.", tags: ['skills', 'certification'] },
 ];

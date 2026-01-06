@@ -125,11 +125,12 @@ export const dbUpdateUserGoal = (updatedGoal: UserGoal): UserGoal | undefined =>
 };
 
 export const dbDeleteUserGoal = (userId: string, goalId: string): boolean => {
-  let allGoals = getItem<UserGoal[]>(USER_GOALS_KEY) || [];
+  const allGoals = getItem<UserGoal[]>(USER_GOALS_KEY) || [];
   const initialLength = allGoals.length;
-  allGoals = allGoals.filter(g => !(g.id === goalId && g.userId === userId));
-  if (allGoals.length < initialLength) {
-    setItem(USER_GOALS_KEY, allGoals);
+  const filteredGoals = allGoals.filter(g => g.id !== goalId);
+  
+  if (filteredGoals.length < initialLength) {
+    setItem(USER_GOALS_KEY, filteredGoals);
     return true;
   }
   return false;

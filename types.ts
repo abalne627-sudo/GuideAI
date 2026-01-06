@@ -8,8 +8,9 @@ export enum AppPhase {
   Results = 'results',
   ResourceHub = 'resource_hub',
   CompareAssessments = 'compare_assessments',
-  OccupationsExplorer = 'occupations_explorer', // New
-  EducationExplorer = 'education_explorer',   // New
+  OccupationsExplorer = 'occupations_explorer',
+  EducationExplorer = 'education_explorer',
+  Bibliography = 'bibliography',
   Error = 'error',
 }
 
@@ -17,7 +18,7 @@ export enum Framework {
   BigFive = 'BigFive',
   MBTI = 'MBTI',
   RIASEC = 'RIASEC',
-  Values = 'Values', // New Framework
+  Values = 'Values',
 }
 
 export enum BigFiveCategory {
@@ -55,20 +56,19 @@ export enum RIASECCategory {
   Conventional = 'Conventional',
 }
 
-// New ValueCategory Enum
 export enum ValueCategory {
-  Autonomy = 'Autonomy', // Preference for independence and self-direction
-  Teamwork = 'Teamwork', // Preference for collaborative environments
-  Stability = 'Stability', // Preference for secure and predictable work
-  Innovation = 'Innovation', // Preference for creative and forward-thinking tasks
-  WorkLifeBalance = 'Work-Life Balance', // Importance of balancing career and personal life
+  Autonomy = 'Autonomy',
+  Teamwork = 'Teamwork',
+  Stability = 'Stability',
+  Innovation = 'Innovation',
+  WorkLifeBalance = 'Work-Life Balance',
 }
 
 export interface Question {
   id: string;
   text: string;
   framework: Framework;
-  category: BigFiveCategory | MBTICategory | RIASECCategory | ValueCategory; // Updated
+  category: BigFiveCategory | MBTICategory | RIASECCategory | ValueCategory;
   pole?: MBTIPole;
 }
 
@@ -78,7 +78,7 @@ export interface StudentProfile {
   bigFive: Partial<Record<BigFiveCategory, number>>;
   mbti: Partial<Record<MBTICategory, { dominantPole: MBTIPole; scoreDominant: number; scoreRecessive: number }>>;
   riasec: Partial<Record<RIASECCategory, number>>;
-  values: Partial<Record<ValueCategory, number>>; // New: Store value scores
+  values: Partial<Record<ValueCategory, number>>;
   summary?: string;
 }
 
@@ -87,8 +87,9 @@ export interface CareerSuggestion {
   description: string;
   rationale: string;
   educationPathIndia: string;
-  dayInTheLifeNarrative?: string | null; // New
-  dayInTheLifeImageUrl?: string | null; // New
+  dayInTheLifeNarrative?: string | null;
+  dayInTheLifeImageUrl?: string | null;
+  iscoCode?: string | null; // New: Connects to the Global Occupations Explorer
 }
 
 export interface StreamSuggestion {
@@ -108,7 +109,7 @@ export interface AssessmentResultData {
   profileNarrative: string | null;
   careerSuggestions: CareerSuggestion[];
   streamSuggestions: StreamSuggestion[];
-  skillRecommendations?: SkillRecommendation[]; // New
+  skillRecommendations?: SkillRecommendation[];
 }
 
 export interface AssessmentRecord extends AssessmentResultData {
@@ -118,11 +119,10 @@ export interface AssessmentRecord extends AssessmentResultData {
   assessmentName?: string;
 }
 
-// Chatbot Types
 export enum ChatRole {
   User = 'user',
   Model = 'model',
-  Error = 'error', // For displaying errors in chat UI
+  Error = 'error',
 }
 
 export interface ChatMessage {
@@ -132,25 +132,22 @@ export interface ChatMessage {
   timestamp: number;
 }
 
-// Skill Recommendation Type
 export interface SkillRecommendation {
   skillName: string;
   description: string;
-  relevance: string; // Why it's relevant for the user/career
-  learningResources?: Array<{ title: string; url: string; type: string }>; // type e.g. "Online Course", "Article"
+  relevance: string;
+  learningResources?: Array<{ title: string; url: string; type: string }>;
 }
 
-// User Goal Type
 export interface UserGoal {
   id: string;
   userId: string;
   text: string;
-  relatedTo?: string; // e.g., career name, stream name, or general
+  relatedTo?: string;
   createdAt: number;
   isCompleted: boolean;
 }
 
-// Resource Hub Item Type
 export interface ResourceItem {
   id: string;
   title: string;
@@ -160,51 +157,46 @@ export interface ResourceItem {
   tags: string[];
 }
 
-// --- ISCO-08 Classification Types ---
-
 export interface SkillDetail {
   name: string;
-  type: 'technical' | 'soft'; // Example types
+  type: 'technical' | 'soft';
 }
 
 export interface SpecializedISCORole {
-  name: string; // e.g., "Chip Designer"
-  toolsets: string[]; // e.g., ["Verilog/VHDL", "CAD"]
-  typicalDegrees: string[]; // e.g., ["Bachelor's in Electrical Engineering"]
+  name: string;
+  toolsets: string[];
+  typicalDegrees: string[];
 }
 
 export interface ISCOUnitGroup {
-  code: string; // e.g., "1111"
+  code: string;
   title: string;
   minorGroupCode: string;
-  // Enriched data (placeholders, to be populated from other sources or by users)
-  educationPaths?: string[]; // Region-specific education paths
-  requiredSkills?: SkillDetail[]; // Core technical and soft skills
-  salaryRange?: string; // Region-specific salary range
-  demandOutlook?: string; // Region-specific demand outlook (e.g., "High", "Medium", "Low")
+  educationPaths?: string[];
+  requiredSkills?: SkillDetail[];
+  salaryRange?: string;
+  demandOutlook?: string;
   specializedRoles?: SpecializedISCORole[];
-  // Tasks and duties can also be added here if available from source or enriched later
-  // tasks?: string[]; 
 }
 
 export interface ISCOMinorGroup {
-  code: string; // e.g., "111"
+  code: string;
   title: string;
   subMajorGroupCode: string;
-  unitGroups?: ISCOUnitGroup[]; // Optional: direct children references
+  unitGroups?: ISCOUnitGroup[];
 }
 
 export interface ISCOSubMajorGroup {
-  code: string; // e.g., "11"
+  code: string;
   title: string;
   majorGroupCode: string;
-  minorGroups?: ISCOMinorGroup[]; // Optional: direct children references
+  minorGroups?: ISCOMinorGroup[];
 }
 
 export interface ISCOMajorGroup {
-  code: string; // e.g., "1"
+  code: string;
   title: string;
-  subMajorGroups?: ISCOSubMajorGroup[]; // Optional: direct children references
+  subMajorGroups?: ISCOSubMajorGroup[];
 }
 
 export interface ISCOData {
@@ -214,8 +206,16 @@ export interface ISCOData {
   unitGroups: ISCOUnitGroup[];
 }
 
-// --- Shared UI Component Types ---
 export interface BreadcrumbItem {
   label: string;
   onClick?: () => void;
+}
+
+export interface OccupationDeepDive {
+  salaryIndia: string;
+  marketDemand: string;
+  automationRisk: string;
+  topSkills: string[];
+  growthPotential: string;
+  careerPathSummary: string;
 }

@@ -1,20 +1,10 @@
 
-import { GoogleGenAI, GenerateContentResponse, Chat, Type } from "@google/genai"; // Added Type
-import { StudentProfile, CareerSuggestion, StreamSuggestion, SkillRecommendation, ChatMessage, ChatRole } from '../types';
-import { GEMINI_API_KEY, GEMINI_TEXT_MODEL, GEMINI_IMAGE_MODEL } from '../constants';
+import { GoogleGenAI, GenerateContentResponse, Chat, Type } from "@google/genai";
+import { StudentProfile, CareerSuggestion, StreamSuggestion, SkillRecommendation, ChatMessage, ChatRole, OccupationDeepDive } from '../types';
+import { GEMINI_TEXT_MODEL, GEMINI_IMAGE_MODEL } from '../constants';
 
-let ai: GoogleGenAI | null = null;
-
-if (GEMINI_API_KEY && typeof GEMINI_API_KEY === 'string' && GEMINI_API_KEY.trim() !== '') {
-  try {
-    ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-  } catch (error) {
-    console.error("Failed to initialize GoogleGenAI client:", error);
-    ai = null;
-  }
-} else {
-  console.error("Critical: API_KEY not available or invalid. Gemini service will not function.");
-}
+// Function to create a fresh AI instance as recommended
+const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const parseJsonFromGeminiResponse = <T>(responseText: string, context: string): T | null => {
   let jsonStr = responseText.trim();
@@ -31,13 +21,8 @@ const parseJsonFromGeminiResponse = <T>(responseText: string, context: string): 
   }
 };
 
-// Updated to return AsyncIterable for streaming
 export async function* getProfileNarrativeStream(profile: StudentProfile): AsyncIterable<string> {
-  if (!ai) {
-    console.error("Gemini AI service not initialized. Cannot fetch profile narrative.");
-    yield "Error: AI service not available.";
-    return;
-  }
+  const ai = getAI();
   if (!profile.summary) {
     console.error("Profile summary is missing for Gemini API call (profile narrative).");
     yield "Error: Profile summary missing.";
@@ -73,12 +58,8 @@ export async function* getProfileNarrativeStream(profile: StudentProfile): Async
   }
 }
 
-
 export const getCareerSuggestions = async (profile: StudentProfile): Promise<CareerSuggestion[]> => {
-  if (!ai) {
-    console.error("Gemini AI service not initialized. Cannot fetch career suggestions.");
-    return [];
-  }
+  const ai = getAI();
   if (!profile.summary) {
     console.error("Profile summary is missing for Gemini API call (career suggestions).");
     return [];
@@ -93,6 +74,7 @@ export const getCareerSuggestions = async (profile: StudentProfile): Promise<Car
     - 'rationale': Concise explanation of alignment with profile (max 30 words).
     - 'educationPathIndia': Typical educational pathway in India.
     - 'dayInTheLifeNarrative': A short, engaging "Day in the Life" summary for this career (1-2 sentences, max 40 words).
+    - 'iscoCode': Provide the most accurate 4-digit ISCO-08 (International Standard Classification of Occupations) unit group code for this career. If unsure, provide the closest possible 4-digit code.
     
     Return ONLY a valid JSON array of objects.
   `;
@@ -114,23 +96,22 @@ export const getCareerSuggestions = async (profile: StudentProfile): Promise<Car
               rationale: { type: Type.STRING },
               educationPathIndia: { type: Type.STRING },
               dayInTheLifeNarrative: { type: Type.STRING },
+              iscoCode: { type: Type.STRING, description: "4-digit ISCO-08 code" },
             },
-            required: ["name", "description", "rationale", "educationPathIndia", "dayInTheLifeNarrative"],
+            required: ["name", "description", "rationale", "educationPathIndia", "dayInTheLifeNarrative", "iscoCode"],
           }
         }
       },
     });
     const suggestions = parseJsonFromGeminiResponse<CareerSuggestion[]>(response.text, "career suggestions");
     
-    // Sequentially generate images for each suggestion to avoid overwhelming API limits.
-    // In a real app, this might be done on-demand or with more robust error handling/rate limiting.
     if (suggestions) {
       for (let i = 0; i < suggestions.length; i++) {
         try {
           suggestions[i].dayInTheLifeImageUrl = await generateCareerImage(suggestions[i].name);
         } catch (imgError) {
           console.error(`Failed to generate image for ${suggestions[i].name}:`, imgError);
-          suggestions[i].dayInTheLifeImageUrl = null; // Set to null if image generation fails
+          suggestions[i].dayInTheLifeImageUrl = null;
         }
       }
     }
@@ -143,19 +124,28 @@ export const getCareerSuggestions = async (profile: StudentProfile): Promise<Car
 };
 
 export const generateCareerImage = async (careerName: string): Promise<string | null> => {
-  if (!ai) {
-    console.error("Gemini AI service not initialized. Cannot generate image.");
-    return null;
-  }
+  const ai = getAI();
   const prompt = `A hopeful and positive depiction of a young student in India imagining themselves as a ${careerName}. Professional setting, bright, aspirational.`;
   try {
-    const response = await ai.models.generateImages({
+    const response = await ai.models.generateContent({
         model: GEMINI_IMAGE_MODEL,
-        prompt: prompt,
-        config: { numberOfImages: 1, outputMimeType: 'image/jpeg' },
+        contents: {
+          parts: [{ text: prompt }]
+        },
+        config: {
+          imageConfig: {
+            aspectRatio: "1:1"
+          }
+        }
     });
-    if (response.generatedImages && response.generatedImages.length > 0 && response.generatedImages[0].image.imageBytes) {
-        return `data:image/jpeg;base64,${response.generatedImages[0].image.imageBytes}`;
+    
+    const candidates = response.candidates || [];
+    if (candidates.length > 0) {
+      for (const part of candidates[0].content.parts) {
+        if (part.inlineData) {
+          return `data:image/png;base64,${part.inlineData.data}`;
+        }
+      }
     }
     return null;
   } catch (error) {
@@ -165,11 +155,8 @@ export const generateCareerImage = async (careerName: string): Promise<string | 
 };
 
 export const getStreamSuggestions = async (profile: StudentProfile): Promise<StreamSuggestion[]> => {
-  if (!ai) {
-    console.error("Gemini AI service not initialized. Cannot fetch stream suggestions.");
-    return [];
-  }
-   if (!profile.summary) {
+  const ai = getAI();
+  if (!profile.summary) {
     console.error("Profile summary is missing for Gemini API call (stream suggestions).");
     return [];
   }
@@ -216,13 +203,9 @@ export const getStreamSuggestions = async (profile: StudentProfile): Promise<Str
   }
 };
 
-// New: Chatbot functions
 export const startChatSession = (profileSummary: string): Chat | null => {
-  if (!ai) {
-    console.error("Gemini AI service not initialized. Cannot start chat.");
-    return null;
-  }
-  const systemInstruction = `You are GuideAI, a friendly and helpful career and academic mentor for students (ages 12-18). You are chatting with a student who has just completed a psychometric assessment.
+  const ai = getAI();
+  const systemInstruction = `You are NextStep, a friendly and helpful career and academic mentor for students (ages 12-18). You are chatting with a student who has just completed a psychometric assessment.
 Their profile summary is: ${profileSummary}
 Keep your responses concise, encouraging, and easy to understand. Do not give financial advice or medical advice. Help them explore their results and options.
 Answer questions based on their profile and the context of career/academic guidance.`;
@@ -239,11 +222,7 @@ Answer questions based on their profile and the context of career/academic guida
 };
 
 export async function* sendChatMessageStream(chat: Chat, message: string): AsyncIterable<string> {
-  if (!ai) {
-    console.error("Gemini AI service not initialized. Cannot send message.");
-    yield "Error: AI service not available to send message.";
-    return;
-  }
+  const ai = getAI();
   try {
     const responseStream = await chat.sendMessageStream({ message });
     for await (const chunk of responseStream) {
@@ -255,12 +234,8 @@ export async function* sendChatMessageStream(chat: Chat, message: string): Async
   }
 }
 
-// New: Get Skill Recommendations
 export const getSkillRecommendations = async (profile: StudentProfile, careerContext?: string): Promise<SkillRecommendation[]> => {
-  if (!ai) {
-    console.error("Gemini AI service not initialized. Cannot fetch skill recommendations.");
-    return [];
-  }
+  const ai = getAI();
   if (!profile.summary) {
     console.error("Profile summary is missing for Gemini API call (skill recommendations).");
     return [];
@@ -318,10 +293,6 @@ ${profile.summary}`;
       },
     });
     const recommendations = parseJsonFromGeminiResponse<SkillRecommendation[]>(response.text, "skill recommendations");
-    // if (response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
-    //   console.log("Grounding Chunks for Skills:", response.candidates[0].groundingMetadata.groundingChunks);
-    //   // Process and potentially add these URLs to the recommendations if structured appropriately.
-    // }
     return recommendations || [];
   } catch (error) {
     console.error("Error fetching skill recommendations from Gemini:", error);
@@ -329,16 +300,49 @@ ${profile.summary}`;
   }
 };
 
-// Helper to get full profile narrative (non-streaming, for convenience if needed elsewhere)
-export const getFullProfileNarrative = async (profile: StudentProfile): Promise<string | null> => {
-  if (!ai || !profile.summary) return null;
-  let fullNarrative = "";
+export const getOccupationDeepDive = async (iscoTitle: string, iscoCode: string): Promise<OccupationDeepDive | null> => {
+  const ai = getAI();
+  const prompt = `
+    Provide a comprehensive deep-dive into the following occupation from the ISCO-08 framework:
+    Title: ${iscoTitle}
+    Code: ${iscoCode}
+
+    Focus on the Indian labor market where possible.
+    Include:
+    - 'salaryIndia': Typical monthly salary range in INR for early and mid-career professionals.
+    - 'marketDemand': A qualitative description of current demand in India.
+    - 'automationRisk': Estimated risk of AI automation (Low/Medium/High) with a brief reason.
+    - 'topSkills': Array of 3-5 specific technical or soft skills crucial for success.
+    - 'growthPotential': Future outlook for this role over the next 10 years.
+    - 'careerPathSummary': 1-2 sentences on the typical advancement path.
+
+    Return ONLY a valid JSON object.
+  `;
+
   try {
-    for await (const chunk of getProfileNarrativeStream(profile)) {
-      fullNarrative += chunk;
-    }
-    return fullNarrative.startsWith("Error:") ? null : fullNarrative;
-  } catch {
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: GEMINI_TEXT_MODEL,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        temperature: 0.4,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            salaryIndia: { type: Type.STRING },
+            marketDemand: { type: Type.STRING },
+            automationRisk: { type: Type.STRING },
+            topSkills: { type: Type.ARRAY, items: { type: Type.STRING } },
+            growthPotential: { type: Type.STRING },
+            careerPathSummary: { type: Type.STRING },
+          },
+          required: ["salaryIndia", "marketDemand", "automationRisk", "topSkills", "growthPotential", "careerPathSummary"]
+        }
+      },
+    });
+    return parseJsonFromGeminiResponse<OccupationDeepDive>(response.text, "occupation deep dive");
+  } catch (error) {
+    console.error("Error fetching occupation deep dive:", error);
     return null;
   }
 };

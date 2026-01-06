@@ -26,11 +26,15 @@ const GoalManager: React.FC<GoalManagerProps> = ({ user }) => {
     setNewGoalText('');
   };
 
-  const handleDeleteGoal = (goalId: string) => {
-    if (window.confirm("Are you sure you want to delete this goal?")) {
-      dbDeleteUserGoal(user.id, goalId);
-      setGoals(prev => prev.filter(g => g.id !== goalId));
-    }
+  const handleDeleteGoal = (e: React.MouseEvent, goalId: string) => {
+    e.stopPropagation(); // Prevent any parent click triggers
+
+    const success = dbDeleteUserGoal(user.id, goalId);
+      if (success) {
+        setGoals(prev => prev.filter(g => g.id !== goalId));
+      } else {
+        console.error("Failed to delete goal from storage");
+      }
   };
 
   const handleToggleComplete = (goal: UserGoal) => {
@@ -97,26 +101,40 @@ const GoalManager: React.FC<GoalManagerProps> = ({ user }) => {
         <ul className="space-y-3">
           {goals.map(goal => (
             <li key={goal.id} className={`p-3 rounded-lg flex items-center justify-between transition-all duration-300 ${goal.isCompleted ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'} border`}>
-              <div className="flex items-center flex-grow">
+              <div className="flex items-center flex-grow min-w-0">
                 <input 
                   type="checkbox" 
                   checked={goal.isCompleted} 
                   onChange={() => handleToggleComplete(goal)}
-                  className="h-5 w-5 text-accent rounded border-gray-300 focus:ring-accent mr-3 cursor-pointer"
+                  className="h-5 w-5 text-accent rounded border-gray-300 focus:ring-accent mr-3 cursor-pointer shrink-0"
                   aria-labelledby={`goal-text-${goal.id}`}
                 />
-                <span id={`goal-text-${goal.id}`} className={`flex-grow ${goal.isCompleted ? 'line-through text-gray-500' : 'text-neutral-dark'}`}>
+                <span id={`goal-text-${goal.id}`} className={`truncate ${goal.isCompleted ? 'line-through text-gray-500' : 'text-neutral-dark'}`}>
                   {goal.text}
                 </span>
               </div>
-              <div className="flex-shrink-0 space-x-2 ml-2">
+              <div className="flex-shrink-0 flex items-center gap-1 ml-4">
                 {!goal.isCompleted && (
-                    <button onClick={() => handleEditGoal(goal)} className="text-blue-500 hover:text-blue-700 p-1" aria-label={`Edit goal: ${goal.text}`}>
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
+                    <button 
+                      onClick={() => handleEditGoal(goal)} 
+                      className="text-blue-500 hover:bg-blue-50 p-2 rounded-full transition-colors flex items-center justify-center" 
+                      aria-label={`Edit goal: ${goal.text}`} 
+                      type="button"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 pointer-events-none">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                        </svg>
                     </button>
                 )}
-                <button onClick={() => handleDeleteGoal(goal.id)} className="text-red-500 hover:text-red-700 p-1" aria-label={`Delete goal: ${goal.text}`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.56 0c1.153 0 2.243.096 3.262.27m-3.262.27L6.201 19.673M16.5 5.654L12 2.253 7.5 5.654M21 5.79V21A2.25 2.25 0 0118.75 23.25H5.25A2.25 2.25 0 013 21V5.79m18 0c0-2.016-1.632-3.646-3.646-3.646H6.646C4.632 2.148 3 3.778 3 5.79m18 0c0 2.633-2.91 3.636-3.646 3.636m-12.56 0c.735 0 3.646-1.003 3.646-3.636" /></svg>
+                <button 
+                  onClick={(e) => handleDeleteGoal(e, goal.id)} 
+                  className="text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors flex items-center justify-center" 
+                  aria-label={`Delete goal: ${goal.text}`}
+                  type="button"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 pointer-events-none">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.56 0c1.153 0 2.243.096 3.262.27m-3.262.27L6.201 19.673M16.5 5.654L12 2.253 7.5 5.654M21 5.79V21A2.25 2.25 0 0118.75 23.25H5.25A2.25 2.25 0 013 21V5.79" />
+                  </svg>
                 </button>
               </div>
             </li>

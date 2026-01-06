@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { IndianEducationSystem, Curriculum, Stream, UgDegreeOption, PgDegreeOption, PhdOption, CompetitiveExam } from '../models/educationSystemTypes';
-import { BreadcrumbItem } from '../../types'; // Corrected import path
+import { BreadcrumbItem } from '../types'; // Corrected import path
 import Card from './shared/Card';
 import Breadcrumbs from './shared/Breadcrumbs';
 
